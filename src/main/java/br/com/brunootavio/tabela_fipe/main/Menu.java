@@ -1,92 +1,131 @@
 package br.com.brunootavio.tabela_fipe.main;
 
+import br.com.brunootavio.tabela_fipe.exception.ConverterJsonException;
+import br.com.brunootavio.tabela_fipe.exception.DadosNaoEncontrados;
+import br.com.brunootavio.tabela_fipe.exception.FipeApiException;
 import br.com.brunootavio.tabela_fipe.model.Dados;
 import br.com.brunootavio.tabela_fipe.model.Modelos;
+import br.com.brunootavio.tabela_fipe.enums.TipoVeiculo;
 import br.com.brunootavio.tabela_fipe.model.Veiculo;
-import br.com.brunootavio.tabela_fipe.service.ConsumoApi;
-import br.com.brunootavio.tabela_fipe.service.ConverterDados;
-import org.apache.logging.log4j.message.StringFormattedMessage;
-
+import br.com.brunootavio.tabela_fipe.service.FipeService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import java.util.List;
-import java.util.Optional;
 import java.util.Scanner;
-import java.util.stream.Collectors;
+import java.util.function.Supplier;
 
 public class Menu {
-    private Scanner scanner = new Scanner(System.in);
-    private ConsumoApi consumoApi = new ConsumoApi();
-    private ConverterDados converterDados = new ConverterDados();
+    private static final Logger logger =
+            LoggerFactory.getLogger(Menu.class);
 
+    private Scanner scanner = new Scanner(System.in);
     private final String API_BASE = "https://parallelum.com.br/fipe/api/v1/";
+    private FipeService fipeService = new FipeService();
+
+    private <T> T executarComTratamento(Supplier<T> acao) {
+        try {
+            return acao.get();
+        } catch (FipeApiException e) {
+            System.out.println("Erro ao conectar na API.");
+        } catch (ConverterJsonException e) {
+            System.out.println("Erro ao processar JSON.");
+        } catch (DadosNaoEncontrados e){
+            System.out.println(e.getMessage());
+        }
+        catch (Exception e) {
+            System.out.println("Erro inesperado.");
+        }
+
+        throw new RuntimeException("Execução interrompida.");
+    }
 
     public void exibirMenu() {
-        boolean menu = true;
-        while (menu) {
-            System.out.println("""
-                        Qual tipo de veiculo quer consultar ?
-                        - Carros
-                        - Motos
-                        - Caminhões
-                        """);
-            var tipoVeiculo = scanner.nextLine();
-            tipoVeiculo = tipoVeiculo.toLowerCase();
-            String endereco;
 
-            if (tipoVeiculo.contains("car")) {
-                endereco = API_BASE + "carros/marcas/";
-            } else if (tipoVeiculo.contains("mot")) {
-                endereco = API_BASE + "motos/marcas/";
-            } else if (tipoVeiculo.contains("cam")){
-                endereco = API_BASE + "caminhoes/marcas/";
-            } else {
-                System.out.println("Opção incorreta!");
-                continue;
-            }
+        System.out.println("Digite o tipo do veiculo: ");
+        var tipoVeiculo = scanner.nextLine().toUpperCase();
 
-            var json = consumoApi.obterDados(endereco);
+        TipoVeiculo tipo;
 
-            List<Dados> dados = converterDados.obterList(json, Dados.class);
-            String dados1 = dados.stream()
-                    .map(Dados::toString)
-                    .collect(Collectors.joining(""));
-            System.out.println("Marcas: ");
-            System.out.println(dados1);
+        try {
+            tipo = TipoVeiculo.valueOf(tipoVeiculo);
+            logger.info("Usuário escolheu o tipo {}", tipo);
+        } catch (IllegalArgumentException e) {
+            System.out.println("Tipo inválido! ");
+            logger.warn("Tipo invalido escolhido pelo usuário {}", tipoVeiculo);
+            return;
+        }
 
+        String endereco = API_BASE + tipo.getEndpoint() + "/marcas/";
+        String json;
+
+        json = executarComTratamento(() -> fipeService.buscarJson(endereco));
+
+        List<Dados> dados = executarComTratamento(() ->
+                fipeService.validarLista(fipeService.buscarLista(json, Dados.class), "Nenhuma marca retornada pela API.")
+        );
+
+        System.out.println("Marcas: ");
+        dados.forEach(System.out::println);
+
+        Dados marcaSelecionada;
+
+        do {
             System.out.println("Digite a marca pelo ID: ");
             var idMarca = scanner.nextLine();
-            endereco = endereco + idMarca + "/modelos/";
 
-            var json1 = consumoApi.obterDados(endereco);
-            Modelos dados2 = converterDados.obterDados(json1, Modelos.class);
-            String dados3 = dados2.modelos().stream()
-                    .map(Dados::toString)
-                    .collect(Collectors.joining(""));
-            System.out.println("Modelos: ");
-            System.out.println(dados3);
+             marcaSelecionada = dados.stream()
+                    .filter(m -> m.id().equals(idMarca))
+                    .findFirst()
+                    .orElse(null);
 
+             if (marcaSelecionada == null) {
+                 System.out.println("Marca não encontrada. Tente novamente!");
+             }
+        } while (marcaSelecionada == null);
+
+
+        String enderecoModelo = endereco + marcaSelecionada.id() + "/modelos/";
+
+        var json1 = executarComTratamento(() -> fipeService.buscarJson(enderecoModelo));
+        Modelos modelosResponse = executarComTratamento(() ->
+                fipeService.validarObjeto(fipeService.buscarObjeto(json1, Modelos.class), "Nenhum modelo retornado pela API"));
+
+        System.out.println("Modelos: ");
+        modelosResponse.modelos()
+                        .forEach(System.out::println);
+
+        Dados modeloSelecionado;
+        do {
             System.out.println("Digite o modelo pelo ID, para obter todas as informações dos veiculos: ");
             var idModelo = scanner.nextLine();
-            endereco = endereco + idModelo + "/anos/";
-            var jsonAnos = consumoApi.obterDados(endereco);
-            List<Dados> anos = converterDados.obterList(jsonAnos, Dados.class);
 
-            for (Dados ano : anos) {
-
-                String enderecoAnos = endereco + ano.id();
-                var jsonDetalhes = consumoApi.obterDados(enderecoAnos);
-
-                Veiculo veiculo = converterDados.obterDados(jsonDetalhes, Veiculo.class);
-
-                System.out.println("================================");
-                System.out.println("Marca: " + veiculo.marca());
-                System.out.println("Ano: " + veiculo.anoModelo());
-                System.out.println("Valor: " + veiculo.valor());
-                System.out.println("Combustível: " + veiculo.combustivel());
-                System.out.println("Código FIPE: " + veiculo.codigoFipe());
-
-
+            modeloSelecionado = modelosResponse.modelos().stream()
+                    .filter(m -> m.id().equals(idModelo))
+                    .findFirst()
+                    .orElse(null);
+            
+            if (modeloSelecionado == null){
+                System.out.println("Modelo não encontrado. Tente novamente!");
             }
-        menu = false;
+        } while (modeloSelecionado == null);
+
+
+        String enderecoAno = enderecoModelo + modeloSelecionado.id() + "/anos/";
+        var jsonAnos = executarComTratamento(() -> fipeService.buscarJson(enderecoAno));
+        List<Dados> anos = executarComTratamento(() ->
+                fipeService.validarLista(fipeService.buscarLista(jsonAnos, Dados.class),"Ano não encontrado"));
+
+        for (Dados ano : anos) {
+
+            String enderecoAnos = enderecoAno + ano.id();
+            var jsonDetalhes = executarComTratamento(() -> fipeService.buscarJson(enderecoAnos));
+
+            Veiculo veiculo = executarComTratamento(() -> fipeService.buscarObjeto(jsonDetalhes, Veiculo.class));
+
+            System.out.println("================================");
+            System.out.println(veiculo);
+
+
         }
     }
 }

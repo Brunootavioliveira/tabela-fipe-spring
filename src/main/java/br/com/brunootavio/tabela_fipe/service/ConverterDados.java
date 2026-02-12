@@ -1,21 +1,31 @@
 package br.com.brunootavio.tabela_fipe.service;
 
+import br.com.brunootavio.tabela_fipe.exception.ConverterJsonException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.type.CollectionType;
-
+import com.sun.net.httpserver.Request;
+import org.slf4j.LoggerFactory;
+import org.slf4j.Logger;
 import java.util.List;
+
 
 public class ConverterDados implements IConverteDados{
 
     private ObjectMapper mapper = new ObjectMapper();
+
+    private static final Logger logger =
+            LoggerFactory.getLogger(ConverterDados.class);
 
     @Override
     public <T> T obterDados(String json, Class<T> classe) {
         try {
             return mapper.readValue(json, classe);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
+            logger.error("Falha ao converter Json {}", classe.getSimpleName(), e);
+            throw new ConverterJsonException(
+                    "Erro ao converter Json", e
+            );
         }
     }
 
@@ -26,7 +36,10 @@ public class ConverterDados implements IConverteDados{
         try {
             return mapper.readValue(json, lista);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException(e);
+            logger.error("Falha ao converter lista de Json", classe.getSimpleName(), e);
+            throw new ConverterJsonException(
+                    "Erro ao converter LISTA Json", e
+            );
         }
     }
 }

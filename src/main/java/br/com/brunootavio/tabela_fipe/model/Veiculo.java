@@ -14,13 +14,13 @@ public record Veiculo(@JsonAlias("Valor") String valor,
 
     @Override
     public String toString() {
-        return "Veiculo: " +
-                "Valor: " + valor + '\'' +
-                "Marca: " + marca + '\'' +
-                "Modelo: " + modelo + '\'' +
-                "Ano do Modelo: " + anoModelo + '\'' +
-                "Combustivel: " + combustivel + '\'' +
-                "Codigo Fipe: " + codigoFipe + '\'';
+        return "Veiculo: " + "\n" +
+                "Valor: " + valor + '\n' +
+                "Marca: " + marca + '\n' +
+                "Modelo: " + modelo + '\n' +
+                "Ano do Modelo: " + anoModelo + '\n' +
+                "Combustivel: " + combustivel + '\n' +
+                "Codigo Fipe: " + codigoFipe + '\n';
     }
 
     @Override
