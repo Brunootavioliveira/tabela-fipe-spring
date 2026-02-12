@@ -106,7 +106,7 @@ Código FIPE: 001234-5
 
 ---
 
-## 📚 Tecnologias
+## Tecnologias
 
 - Java 21
 - Maven
